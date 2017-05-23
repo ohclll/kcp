@@ -37,6 +37,19 @@ class Data:
         self._vol = None
         self._weather = None
 
+    def data_select(self,traj,eta=2):
+        mean = dict(traj[['route', 'travel_time']].groupby('route').mean()['travel_time'])
+        std = dict(traj[['route', 'travel_time']].groupby('route').std()['travel_time'])
+        tmp=[]
+        for _,r in traj.iterrows():
+            if mean[r.route]-eta*std[r.route]<r.travel_time<mean[r.route]+eta*std[r.route]:
+                tmp.append(1)
+            else:
+                tmp.append(0)
+        traj['in']=tmp
+        traj=traj[traj['in']>0.5]
+        traj =traj.drop('in', axis=1)
+        return traj
     @property
     def traj(self):
         if self._traj is None:
@@ -50,6 +63,9 @@ class Data:
                 lambda x: datetime.timedelta(seconds=x))
             traj['end_time'] = traj['end_time'].apply(lambda x: x.strftime('%Y-%m-%d %H:%M:%S'))
             traj['route'] = traj['intersection_id'] + traj['tollgate_id'].apply(str)
+
+            # 过滤异常
+            traj=self.data_select(traj,eta=3)
             self._traj = traj
         return self._traj
 
@@ -84,7 +100,7 @@ class Data:
         t_index = pd.date_range(weather.index.min(), weather.index.max(), freq='60S')
         weather = weather.reindex(t_index).interpolate(method='time')
         names = weather.columns.tolist()
-        weather[names] = MinMaxScaler(feature_range=(-1, 1)).fit_transform(weather[names])
+        # weather[names] = MinMaxScaler(feature_range=(-1, 1)).fit_transform(weather[names])
         weather = weather[['pressure', 'wind_speed', 'temperature', 'precipitation']]
         return weather
 
@@ -116,25 +132,15 @@ class Data:
             if len(data) == 1:
                 return [np.mean(data),
                         np.median(data),
-                        np.max(data),
-                        np.min(data),
-                        np.percentile(data, 25),
-                        np.percentile(data, 75),
-                        np.nan,
                         np.nan,
                         np.nan,
                         np.nan]
             else:
                 return [np.mean(data),
                         np.median(data),
-                        np.max(data),
-                        np.min(data),
-                        np.percentile(data, 25),
-                        np.percentile(data, 75),
                         np.std(data),
                         np.mean(data) - np.std(data),
-                        np.mean(data) + np.std(data),
-                        np.max(data) - np.min(data)]
+                        np.mean(data) + np.std(data)]
         else:
             return [np.nan] * 10
 
