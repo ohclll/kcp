@@ -84,7 +84,6 @@ class Data:
         t_index = pd.date_range(weather.index.min(), weather.index.max(), freq='60S')
         weather = weather.reindex(t_index).interpolate(method='time')
         names = weather.columns.tolist()
-        # names.remove('time')
         weather[names] = MinMaxScaler(feature_range=(-1, 1)).fit_transform(weather[names])
         weather = weather[['pressure', 'wind_speed', 'temperature', 'precipitation']]
         return weather
@@ -268,6 +267,14 @@ def gen_dates(start_date, end_date, holidays):
     return dates
 
 
+def gen_datetimes(times, dates):
+    datetimes=[]
+    for date in dates:
+        for h,m in times:
+            dt=datetime.datetime.combine(date,datetime.time(hour=h,minute=m))
+            datetimes.append(dt)
+    return datetimes
+
 def append_(src, dst):
     for k in dst:
         src[k].append(dst[k])
@@ -282,95 +289,138 @@ def imputer3D(data):
     return data
 
 
-def extract_features(dates, times, interval=20):
-    times = list(times)
+def extract_features(all_times, interval=20):
     route_x = defaultdict(list)
     link_x = defaultdict(list)
-    # vol_x = defaultdict(list)
     wea_x = []
     time_x = []
-    tms = []
-    for h, m in times:
-        route_ftrs = defaultdict(list)
-        link_ftrs = defaultdict(list)
-        wea_ftrs = []
-        time_ftrs = []
-        # vol_ftrs = defaultdict(list)
-        for date in dates:
-            time = datetime.datetime(date.year, date.month, date.day, h, m)
-            if h < 12:
-                time_ftr = [1, ]
-            else:
-                time_ftr = [0, ]
-            tmp = [0, 0, 0, 0, 0, 0, 0]
-            tmp[time.weekday()] = 1
-            time_ftr.extend(tmp)
-            tms.append(str(time))
-            print('\r{}'.format(str(time)), end='')
-            link_ftr, route_ftr = data.traj_features(time, interval=interval)
-            wea_ftr = data.wea_features(time, interval=20)
-            wea_ftrs.append(wea_ftr)
-            time_ftrs.append(time_ftr)
-            # vol_ftr = data.vol_features(time, interval=interval)
-            # vol_ftrs = append_(vol_ftrs, vol_ftr)
-            route_ftrs = append_(route_ftrs, route_ftr)
-            link_ftrs = append_(link_ftrs, link_ftr)
+    for time in all_times:
+        print('\r{}'.format(str(time)), end='')
+        if time.hour<12:
+            time_ftr = [1, ]
+        else:
+            time_ftr = [0, ]
+        tmp = [0, 0, 0, 0, 0, 0, 0]
+        tmp[time.weekday()] = 1
+        time_ftr.extend(tmp)
+        time_x.extend(time_ftr)
 
-        link_ftrs = {k: imputer3D(v) for k, v in link_ftrs.items()}
-        route_ftrs = {k: imputer3D(v) for k, v in route_ftrs.items()}
+        wea_ftr = data.wea_features(time, interval=20)
+        wea_x.append(wea_ftr)
 
-        time_x.append(np.array(time_ftrs, 'float32'))
-        wea_x.append(np.array(wea_ftrs, 'float32'))
+        link_ftr, route_ftr = data.traj_features(time, interval=interval)
+        route_x=append_(route_x, route_ftr)
+        link_x=append_(link_x, link_ftr)
 
-        # vol_x = append_(vol_x, vol_ftrs)
-        route_x = append_(route_x, route_ftrs)
-        link_x = append_(link_x, link_ftrs)
+    link_x = {k: imputer3D(v) for k, v in link_x.items()}
+    route_x={k: imputer3D(v) for k, v in route_x.items()}
+    wea_x=np.array(wea_x,dtype='float32')
+    time_x=np.array(time_x,dtype='float32')
+    return route_x, link_x, wea_x, time_x
 
-    wea_x = np.concatenate(wea_x)
-    time_x = np.concatenate(time_x)
 
-    # vol_x = {k: np.concatenate(v).astype('float32') for k, v in vol_x.items()}
-    route_x = {k: np.concatenate(v).astype('float32') for k, v in route_x.items()}
-    link_x = {k: np.concatenate(v).astype('float32') for k, v in link_x.items()}
+    # for h, m in times:
+    #     route_ftrs = defaultdict(list)
+    #     link_ftrs = defaultdict(list)
+    #     wea_ftrs = []
+    #     time_ftrs = []
+    #     # vol_ftrs = defaultdict(list)
+    #     for date in dates:
+    #         time = datetime.datetime(date.year, date.month, date.day, h, m)
+    #         if h < 12:
+    #             time_ftr = [1, ]
+    #         else:
+    #             time_ftr = [0, ]
+    #         tmp = [0, 0, 0, 0, 0, 0, 0]
+    #         tmp[time.weekday()] = 1
+    #         time_ftr.extend(tmp)
+    #         tms.append(str(time))
+    #         print('\r{}'.format(str(time)), end='')
+    #         link_ftr, route_ftr = data.traj_features(time, interval=interval)
+    #         wea_ftr = data.wea_features(time, interval=20)
+    #         wea_ftrs.append(wea_ftr)
+    #         time_ftrs.append(time_ftr)
+    #         # vol_ftr = data.vol_features(time, interval=interval)
+    #         # vol_ftrs = append_(vol_ftrs, vol_ftr)
+    #         route_ftrs = append_(route_ftrs, route_ftr)
+    #         link_ftrs = append_(link_ftrs, link_ftr)
+    #
+    #     link_ftrs = {k: imputer3D(v) for k, v in link_ftrs.items()}
+    #     route_ftrs = {k: imputer3D(v) for k, v in route_ftrs.items()}
+    #
+    #     time_x.append(np.array(time_ftrs, 'float32'))
+    #     wea_x.append(np.array(wea_ftrs, 'float32'))
+    #
+    #     # vol_x = append_(vol_x, vol_ftrs)
+    #     route_x = append_(route_x, route_ftrs)
+    #     link_x = append_(link_x, link_ftrs)
+    #
+    # wea_x = np.concatenate(wea_x)
+    # time_x = np.concatenate(time_x)
+    #
+    # # vol_x = {k: np.concatenate(v).astype('float32') for k, v in vol_x.items()}
+    # route_x = {k: np.concatenate(v).astype('float32') for k, v in route_x.items()}
+    # link_x = {k: np.concatenate(v).astype('float32') for k, v in link_x.items()}
+    #
+    # return route_x, link_x, wea_x, time_x, tms
 
-    return route_x, link_x, wea_x, time_x, tms
 
 def get_weight(time):
     # time = datetime.datetime(date.year, date.month, date.day, h, m)
-    t=datetime.datetime(time.year,time.month,time.day,8)
-    if time.hour>12:
-        time=time-datetime.timedelta(hours=9)
-    delta=abs((time-t).total_seconds())/60
-    w=1-delta*(0.7/60)
+    t = datetime.datetime(time.year, time.month, time.day, 8)
+    if time.hour > 12:
+        time = time - datetime.timedelta(hours=9)
+    delta = abs((time - t).total_seconds()) / 60
+    w = 1 - delta * (0.7 / 60)
     return w
 
 
-def extract_target(dates, times, interval=20):
-    times = list(times)
+def get_delta(time):
+    # time = datetime.datetime(date.year, date.month, date.day, h, m)
+    t0 = datetime.datetime(time.year, time.month, time.day, 8)
+    t1 = datetime.datetime(time.year, time.month, time.day, 17)
+    delta0 = abs((time - t0).total_seconds()) / 60
+    delta1 = abs((time - t1).total_seconds()) / 60
+    delta=min(delta0, delta1)
+    return delta
+
+
+def extract_target(all_times, interval=20):
     route_y = defaultdict(list)
     link_y = defaultdict(list)
-    weights=[]
-    for h, m in times:
-        route_targets = defaultdict(list)
-        link_targets = defaultdict(list)
-        for date in dates:
-            time = datetime.datetime(date.year, date.month, date.day, h, m)
-            weights.append(get_weight(time))
-            print('\r{}'.format(str(time)), end='')
-            target_link, target_route, target_vol = data.get_target(time, interval=interval)
-            route_targets = append_(route_targets, target_route)
-            link_targets = append_(link_targets, target_link)
+    deltas = []
+    tms=[str(x) for x in all_times]
+    for time in all_times:
+        deltas.append(get_delta(time))
+        print('\r{}'.format(str(time)), end='')
+        target_link, target_route, target_vol = data.get_target(time, interval=interval)
+        route_y=append_(route_y,target_route)
+        link_y=append_(link_y,target_link)
+    deltas = np.array(deltas, dtype='float32')
+    route_y={k: np.nan_to_num(v) for k, v in route_y.items()}
+    return route_y, link_y, deltas, tms
 
-        link_targets = {k: Imputer().fit_transform(v) for k, v in link_targets.items()}
-        route_targets = {k: np.nan_to_num(v) for k, v in route_targets.items()}
-
-        route_y = append_(route_y, route_targets)
-        link_y = append_(link_y, link_targets)
-
-    route_y = {k: np.concatenate(v).astype('float32') for k, v in route_y.items()}
-    link_y = {k: np.concatenate(v).astype('float32') for k, v in link_y.items()}
-    weights=np.array(weights,dtype='float32')
-    return route_y, link_y, weights
+    # for h, m in times:
+    #     route_targets = defaultdict(list)
+    #     link_targets = defaultdict(list)
+    #     for date in dates:
+    #         time = datetime.datetime(date.year, date.month, date.day, h, m)
+    #         deltas.append(get_delta(time))
+    #         print('\r{}'.format(str(time)), end='')
+    #         target_link, target_route, target_vol = data.get_target(time, interval=interval)
+    #         route_targets = append_(route_targets, target_route)
+    #         link_targets = append_(link_targets, target_link)
+    #
+    #     link_targets = {k: Imputer().fit_transform(v) for k, v in link_targets.items()}
+    #     route_targets = {k: np.nan_to_num(v) for k, v in route_targets.items()}
+    #
+    #     route_y = append_(route_y, route_targets)
+    #     link_y = append_(link_y, link_targets)
+    #
+    # route_y = {k: np.concatenate(v).astype('float32') for k, v in route_y.items()}
+    # link_y = {k: np.concatenate(v).astype('float32') for k, v in link_y.items()}
+    # deltas = np.array(deltas, dtype='float32')
+    # return route_y, link_y, deltas
 
 
 if __name__ == '__main__':
@@ -378,100 +428,33 @@ if __name__ == '__main__':
     data = Data(data_dir)
     holidays = [datetime.date(2016, 9, 15), datetime.date(2016, 9, 16), datetime.date(2016, 9, 17)] + \
                [datetime.date(2016, 10, i + 1) for i in range(7)]
-    intervals = [120, 60, 8, 10, 12, 15, 17, 24, 20, 30, 40]
+    stride = 1
+    intervals = [20, 120, 60, 10, 12, 15, 17, 24, 30, 40]
     for interval in intervals:
-        # times = chain(((i, 0) for i in range(9, 17)),
-        #               ((i, 3) for i in range(9, 17)),
-        #               ((i, 6) for i in range(9, 17)),
-        #               ((i, 9) for i in range(9, 17)),
-        #               ((i, 12) for i in range(9, 17)),
-        #               ((i, 15) for i in range(9, 16)),
-        #               ((i, 18) for i in range(9, 16)),
-        #               ((i, 21) for i in range(9, 16)),
-        #               ((i, 24) for i in range(9, 16)),
-        #               ((i, 27) for i in range(9, 16)),
-        #
-        #               ((i, 30) for i in range(9, 16)),
-        #               ((i, 33) for i in range(9, 16)),
-        #               ((i, 36) for i in range(9, 16)),
-        #               ((i, 39) for i in range(9, 16)),
-        #               ((i, 42) for i in range(9, 16)),
-        #               ((i, 45) for i in range(8, 16)),
-        #               ((i, 48) for i in range(8, 16)),
-        #               ((i, 51) for i in range(8, 16)),
-        #               ((i, 54) for i in range(8, 16)),
-        #               ((i, 57) for i in range(8, 16)), )
-        # times = list(times)
-        # dates = gen_dates(datetime.date(2016, 7, 19), datetime.date(2016, 10, 10),holidays)
-        # print(len(dates) * len(times))
-        # route_ftrs, link_ftrs, vol_ftrs, wea_ftrs, tms = extract_features(dates, times, interval=interval)
-        # if interval==20:
-        #     route_targets, link_targets = extract_target(dates, times, interval=20)
-        # else:
-        #     route_targets, link_targets= 0,0
-        # with open(os.path.join(data_dir, 'data/pretrain_ftrs_{}.pkl'.format(interval)), 'wb') as f:
-        #     pickle.dump([route_ftrs, link_ftrs, vol_ftrs, wea_ftrs, tms, route_targets, link_targets], f)
-
-        # times = [(7, 50), (7, 52), (7, 54), (7, 56), (7, 58), (8, 0),
-        #          (8, 2), (8, 4), (8, 6), (8, 8), (8, 10),
-        #          (16, 50), (16, 52), (16, 54), (16, 56), (16, 58), (17, 0),
-        #          (17, 2), (17, 4), (17, 6), (17, 8), (17, 10)]
-        # dates = gen_dates(datetime.date(2016, 7, 19), datetime.date(2016, 10, 17),holidays)
-        # print(len(dates) * len(times))
-        # route_ftrs, link_ftrs, vol_ftrs, wea_ftrs, tms = extract_features(dates, times, interval=interval)
-        # if interval == 20:
-        #     route_targets, link_targets = extract_target(dates, times, interval=20)
-        # else:
-        #     route_targets, link_targets = 0, 0
-        # with open(os.path.join(data_dir, 'trainval_ftrs_{}.pkl'.format(interval)), 'wb') as f:
-        #     pickle.dump([route_ftrs, link_ftrs, vol_ftrs, wea_ftrs, tms, route_targets, link_targets], f)
-
-        times = list([(7, i) for i in range(60)]) + \
-                list([(8, i) for i in range(60)]) + \
-                list([(16, i) for i in range(60)]) + \
-                list([(17, i) for i in range(60)])
-        # times = list([(7, i) for i in range(55,60)]) + \
-        #         list([(8, i) for i in range(6)]) + \
-        #         list([(16, i) for i in range(55,60)]) + \
-        #         list([(17, i) for i in range(6)])
+        times = list([(7, i) for i in range(0, 60, stride)]) + \
+                list([(8, i) for i in range(0, 60, stride)]) + \
+                list([(16, i) for i in range(0, 60, stride)]) + \
+                list([(17, i) for i in range(0, 60, stride)])
         dates = gen_dates(datetime.date(2016, 7, 19), datetime.date(2016, 10, 10), holidays)
-        print(len(dates) * len(times))
-        route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms = extract_features(dates, times, interval=interval)
-        if interval == 20:
-            route_targets, link_targets, weights = extract_target(dates, times, interval=20)
-        else:
-            route_targets, weights = 0, 0
-        with open(os.path.join(data_dir, 'data/train_ftrs_{}.pkl'.format(interval)), 'wb') as f:
-            pickle.dump([route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms, route_targets, weights], f)
+        train_times=gen_datetimes(times,dates)
 
-        times = list([(7, i) for i in range(55,60)]) + \
-                list([(8, i) for i in range(6)]) + \
-                list([(16, i) for i in range(55,60)]) + \
-                list([(17, i) for i in range(6)])
-        dates = gen_dates(datetime.date(2016, 10, 11), datetime.date(2016, 10, 17),holidays)
-        print(len(dates) * len(times))
-        route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms = extract_features(dates, times, interval=interval)
-        if interval == 20:
-            route_targets, link_targets, weights = extract_target(dates, times, interval=20)
-        else:
-            route_targets, weights = 0, 0
-        with open(os.path.join(data_dir, 'datanew/val_ftrs_{}.pkl'.format(interval)), 'wb') as f:
-            pickle.dump([route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms, route_targets, weights], f)
-
-        times = [(8, 0), (17, 0)]
+        times = list([(7, i) for i in range(30, 60, stride)]) + \
+                list([(8, i) for i in range(0, 30, stride)]) + \
+                list([(16, i) for i in range(30, 60, stride)]) + \
+                list([(17, i) for i in range(0, 30, stride)])
         dates = gen_dates(datetime.date(2016, 10, 11), datetime.date(2016, 10, 17), holidays)
-        print(len(dates) * len(times))
-        route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms = extract_features(dates, times, interval=interval)
-        if interval == 20:
-            route_targets, link_targets, weights = extract_target(dates, times, interval=20)
-        else:
-            route_targets, weights = 0, 0
-        with open(os.path.join(data_dir, 'datanew/sval_ftrs_{}.pkl'.format(interval)), 'wb') as f:
-            pickle.dump([route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms, route_targets, weights], f)
+        val_times = gen_datetimes(times, dates)
 
         times = [(8, 0), (17, 0)]
-        dates = gen_dates(datetime.date(2016, 10, 18), datetime.date(2016, 10, 24),holidays)
-        print(len(dates) * len(times))
-        route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms = extract_features(dates, times, interval=interval)
-        with open(os.path.join(data_dir, 'data/test_ftrs_{}.pkl'.format(interval)), 'wb') as f:
-            pickle.dump([route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms], f)
+        dates = gen_dates(datetime.date(2016, 10, 18), datetime.date(2016, 10, 24), holidays)
+        test_times = gen_datetimes(times, dates)
+
+        all_times=train_times+val_times+test_times
+        print('\nall times',len(all_times))
+        route_ftrs, link_ftrs, wea_ftrs, times_ftrs= extract_features(all_times, interval=interval)
+        if interval == 20:
+            route_targets, link_targets, deltas, tms = extract_target(all_times, interval=20)
+        else:
+            route_targets,link_targets, deltas, tms = 0, 0, 0, 0
+        with open(os.path.join(data_dir, 'data/all_ftrs_{}.pkl'.format(interval)), 'wb') as f:
+            pickle.dump([route_ftrs, link_ftrs, wea_ftrs, times_ftrs, tms, route_targets, link_targets, deltas], f)
